@@ -67,8 +67,8 @@ export default function RepositoryDetails() {
             marginRight: '1rem',
             padding: '4px 8px',
             borderRadius: '4px',
-            backgroundColor: latestStatus === 'PENDING' ? '#fef3c7' : latestStatus === 'CLONING' ? '#e0e7ff' : '#eee',
-            color: latestStatus === 'PENDING' ? '#92400e' : latestStatus === 'CLONING' ? '#3730a3' : '#333'
+            backgroundColor: latestStatus === 'PENDING' ? '#fef3c7' : latestStatus === 'CLONING' ? '#e0e7ff' : latestStatus === 'RUNNING' ? '#dcfce7' : latestStatus === 'SUPERSEDED' ? '#e5e7eb' : '#eee',
+            color: latestStatus === 'PENDING' ? '#92400e' : latestStatus === 'CLONING' ? '#3730a3' : latestStatus === 'RUNNING' ? '#166534' : latestStatus === 'SUPERSEDED' ? '#6b7280' : '#333'
           }}>
             {latestStatus}
           </span>

@@ -29,6 +29,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
+      - PYTHONUNBUFFERED=1
     networks:
       - platform-network
     volumes:

@@ -60,6 +60,59 @@ async def update_deployment_status(deployment_id: int, status: str, error: str =
             query_str = "UPDATE deployments SET " + ", ".join(set_clauses) + " WHERE id = :id"
             await session.execute(text(query_str), params)
 
+async def teardown_old_deployments(repo_id: int, current_deployment_id: int):
+    await append_deployment_log(current_deployment_id, f"DEBUG: Entered teardown_old_deployments(repo_id={repo_id}, current={current_deployment_id})\n")
+    try:
+        async with AsyncSessionLocal() as session:
+            query = text("""
+                SELECT id, container_name, image_name 
+                FROM deployments 
+                WHERE repo_id = :repo_id AND status = 'RUNNING' AND id != :current_id
+            """)
+            result = await session.execute(query, {"repo_id": repo_id, "current_id": current_deployment_id})
+            old_deployments = result.fetchall()
+            
+        await append_deployment_log(current_deployment_id, f"DEBUG: Query successful. Found {len(old_deployments)} old deployments.\n")
+        
+        for old in old_deployments:
+            old_id = old[0]
+            old_container = old[1]
+            old_image = old[2]
+            
+            await append_deployment_log(current_deployment_id, f"Tearing down old deployment {old_id}...\n")
+            
+            conf_path = f"/app/nginx/conf.d/deployment-{old_id}.conf"
+            if os.path.exists(conf_path):
+                try:
+                    os.remove(conf_path)
+                except Exception as e:
+                    await append_deployment_log(current_deployment_id, f"Failed to remove config for {old_id}: {e}\n")
+            
+            if old_container:
+                _, stderr, code = run_cmd(["docker", "rm", "-f", old_container])
+                if code != 0:
+                    await append_deployment_log(current_deployment_id, f"Failed to remove container {old_container}: {stderr}\n")
+            
+            if old_image:
+                _, stderr, code = run_cmd(["docker", "rmi", "-f", old_image])
+                if code != 0:
+                    await append_deployment_log(current_deployment_id, f"Failed to remove image {old_image}: {stderr}\n")
+                    
+            async with AsyncSessionLocal() as session:
+                async with session.begin():
+                    await session.execute(text("UPDATE deployments SET status = 'SUPERSEDED' WHERE id = :id"), {"id": old_id})
+                    
+            await append_deployment_log(current_deployment_id, f"Old deployment {old_id} superseded successfully.\n")
+            
+        if len(old_deployments) > 0:
+            await append_deployment_log(current_deployment_id, "Reloading NGINX to apply cleanup...\n")
+            run_cmd(["docker", "exec", "platform-nginx", "nginx", "-s", "reload"])
+            
+    except Exception as e:
+        await append_deployment_log(current_deployment_id, f"DEBUG EXCEPTION: {e}\n")
+        raise e
+
+
 async def main():
     redis_client = redis.from_url(REDIS_URL)
     print("Worker service started. Waiting for jobs...")
@@ -258,6 +311,9 @@ async def main():
                     deployment_url=final_url
                 )
                 await append_deployment_log(deployment_id, f"Deployment available at {final_url}\n")
+                
+                # --- STAGE 9 EXTENSION ---
+                await teardown_old_deployments(repo_id, deployment_id)
                 
             except Exception as e:
                 error_msg = str(e)

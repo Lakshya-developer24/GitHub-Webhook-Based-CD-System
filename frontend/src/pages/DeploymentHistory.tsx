@@ -8,6 +8,7 @@ interface Deployment {
   status: string;
   started_at: string | null;
   triggered_by: string;
+  deployment_url: string | null;
 }
 
 interface Repository {
@@ -46,6 +47,7 @@ export default function DeploymentHistory() {
             <th>Commit SHA</th>
             <th>Status</th>
             <th>Delivery ID</th>
+            <th>URL</th>
           </tr>
         </thead>
         <tbody>
@@ -57,13 +59,22 @@ export default function DeploymentHistory() {
                 <span style={{
                   padding: '4px 8px', 
                   borderRadius: '4px',
-                  backgroundColor: dep.status === 'PENDING' ? '#fef3c7' : '#eee',
-                  color: dep.status === 'PENDING' ? '#92400e' : '#333'
+                  backgroundColor: dep.status === 'PENDING' ? '#fef3c7' : dep.status === 'SUPERSEDED' ? '#e5e7eb' : dep.status === 'RUNNING' ? '#dcfce7' : '#eee',
+                  color: dep.status === 'PENDING' ? '#92400e' : dep.status === 'SUPERSEDED' ? '#6b7280' : dep.status === 'RUNNING' ? '#166534' : '#333'
                 }}>
                   {dep.status}
                 </span>
               </td>
               <td>{dep.triggered_by ? dep.triggered_by.substring(0, 8) + '...' : ''}</td>
+              <td>
+                {dep.deployment_url && (
+                  dep.status === 'SUPERSEDED' ? (
+                    <span style={{ color: '#aaa', textDecoration: 'line-through' }}>{dep.deployment_url}</span>
+                  ) : (
+                    <a href={dep.deployment_url} target="_blank" rel="noreferrer">{dep.deployment_url}</a>
+                  )
+                )}
+              </td>
             </tr>
           ))}
           {deployments.length === 0 && (
