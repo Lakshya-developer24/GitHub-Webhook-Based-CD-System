@@ -4,10 +4,13 @@ from dotenv import load_dotenv
 import redis.asyncio as redis
 from sqlalchemy import text
 from database import engine
+from routes import repositories
 
 load_dotenv()
 
 app = FastAPI(title="GitOps CD Platform")
+
+app.include_router(repositories.router, prefix="/repositories", tags=["Repositories"])
 
 @app.get("/health")
 async def health_check():
