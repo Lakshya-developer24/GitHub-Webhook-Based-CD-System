@@ -1,0 +1,4 @@
+redis
+sqlalchemy[asyncio]
+asyncpg
+python-dotenv
