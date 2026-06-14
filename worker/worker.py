@@ -35,30 +35,30 @@ async def append_deployment_log(deployment_id: int, log_entry: str):
             """)
             await session.execute(query, {"new_log": log_entry, "id": deployment_id})
 
-async def update_deployment_status(deployment_id: int, status: str, error: str = None, image_name: str = None):
+async def update_deployment_status(deployment_id: int, status: str, error: str = None, image_name: str = None, container_name: str = None, deployment_url: str = None, completed_at: datetime = None):
     async with AsyncSessionLocal() as session:
         async with session.begin():
+            set_clauses = ["status = :status"]
+            params = {"status": status, "id": deployment_id}
+            
             if error is not None:
-                query = text("""
-                    UPDATE deployments 
-                    SET status = :status, error = :error 
-                    WHERE id = :id
-                """)
-                await session.execute(query, {"status": status, "error": error, "id": deployment_id})
-            elif image_name is not None:
-                query = text("""
-                    UPDATE deployments 
-                    SET status = :status, image_name = :image_name 
-                    WHERE id = :id
-                """)
-                await session.execute(query, {"status": status, "image_name": image_name, "id": deployment_id})
-            else:
-                query = text("""
-                    UPDATE deployments 
-                    SET status = :status 
-                    WHERE id = :id
-                """)
-                await session.execute(query, {"status": status, "id": deployment_id})
+                set_clauses.append("error = :error")
+                params["error"] = error
+            if image_name is not None:
+                set_clauses.append("image_name = :image_name")
+                params["image_name"] = image_name
+            if container_name is not None:
+                set_clauses.append("container_name = :container_name")
+                params["container_name"] = container_name
+            if deployment_url is not None:
+                set_clauses.append("deployment_url = :deployment_url")
+                params["deployment_url"] = deployment_url
+            if completed_at is not None:
+                set_clauses.append("completed_at = :completed_at")
+                params["completed_at"] = completed_at
+                
+            query_str = "UPDATE deployments SET " + ", ".join(set_clauses) + " WHERE id = :id"
+            await session.execute(text(query_str), params)
 
 async def main():
     redis_client = redis.from_url(REDIS_URL)
@@ -178,6 +178,40 @@ async def main():
             # 3. Build succeeds: status = DEPLOYING
             await update_deployment_status(deployment_id, "DEPLOYING", image_name=image_name)
             await append_deployment_log(deployment_id, "Status updated to DEPLOYING.\n")
+            
+            # --- STAGE 7 EXTENSION ---
+            port = 5000 + deployment_id
+            container_name = f"platform-app-{deployment_id}"
+            
+            await append_deployment_log(deployment_id, f"Running container {container_name} on port {port}...\n")
+            stdout, stderr, code = run_cmd([
+                "docker", "run", "-d",
+                "--name", container_name,
+                "-p", f"{port}:80",
+                image_name
+            ])
+            
+            if stdout:
+                await append_deployment_log(deployment_id, stdout + "\n")
+            if stderr:
+                await append_deployment_log(deployment_id, stderr + "\n")
+                
+            if code != 0:
+                await update_deployment_status(deployment_id, "FAILED", error="Docker run failed")
+                await append_deployment_log(deployment_id, f"Docker run failed with exit code {code}.\n")
+                run_cmd(["docker", "rm", "-f", container_name])
+                continue
+                
+            await append_deployment_log(deployment_id, "Container started successfully.\n")
+            
+            await update_deployment_status(
+                deployment_id, 
+                "RUNNING", 
+                container_name=container_name, 
+                deployment_url=f"http://localhost:{port}",
+                completed_at=datetime.utcnow()
+            )
+            await append_deployment_log(deployment_id, "Status updated to RUNNING.\n")
             
         except Exception as e:
             print(f"Error processing job: {e}")
