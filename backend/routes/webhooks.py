@@ -75,5 +75,20 @@ async def github_webhook(
     
     db.add(new_deployment)
     await db.commit()
+    await db.refresh(new_deployment)
+    
+    import os
+    import redis.asyncio as redis
+    redis_url = os.getenv("REDIS_URL", "redis://platform-redis:6379")
+    redis_client = redis.from_url(redis_url)
+    
+    job_payload = {
+        "deployment_id": new_deployment.id,
+        "repo_id": repo.id,
+        "repo_url": repo.github_url,
+        "commit_sha": commit_sha
+    }
+    await redis_client.rpush("deployments", json.dumps(job_payload))
+    await redis_client.aclose()
     
     return JSONResponse(status_code=200, content={"message": "Deployment created"})

@@ -21,7 +21,15 @@ export default function DeploymentHistory() {
 
   useEffect(() => {
     api.get<Repository>(`/repositories/${id}`).then(res => setRepo(res.data)).catch(() => {});
-    api.get<Deployment[]>(`/repositories/${id}/deployments`).then(res => setDeployments(res.data));
+    
+    const fetchDeployments = () => {
+      api.get<Deployment[]>(`/repositories/${id}/deployments`).then(res => setDeployments(res.data)).catch(() => {});
+    };
+    
+    fetchDeployments();
+    const intervalId = setInterval(fetchDeployments, 3000);
+    
+    return () => clearInterval(intervalId);
   }, [id]);
 
   return (

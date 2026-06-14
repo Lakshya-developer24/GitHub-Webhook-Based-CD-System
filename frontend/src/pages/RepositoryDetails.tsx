@@ -15,6 +15,7 @@ export default function RepositoryDetails() {
   const { id } = useParams<{ id: string }>();
   const [repo, setRepo] = useState<Repository | null>(null);
   const [deploymentCount, setDeploymentCount] = useState(0);
+  const [latestStatus, setLatestStatus] = useState<string>('NONE');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -23,7 +24,12 @@ export default function RepositoryDetails() {
       .catch(() => setError('Repository not found.'));
       
     api.get<any[]>(`/repositories/${id}/deployments`)
-      .then(res => setDeploymentCount(res.data.length))
+      .then(res => {
+        setDeploymentCount(res.data.length);
+        if (res.data.length > 0) {
+          setLatestStatus(res.data[0].status);
+        }
+      })
       .catch(() => {});
   }, [id]);
 
@@ -54,6 +60,18 @@ export default function RepositoryDetails() {
         </div>
         <div className="detail-row">
           <strong>Registered At:</strong> <span>{new Date(repo.registered_at).toLocaleString()}</span>
+        </div>
+        <div className="detail-row">
+          <strong>Latest Deployment:</strong>
+          <span style={{
+            marginRight: '1rem',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            backgroundColor: latestStatus === 'PENDING' ? '#fef3c7' : latestStatus === 'CLONING' ? '#e0e7ff' : '#eee',
+            color: latestStatus === 'PENDING' ? '#92400e' : latestStatus === 'CLONING' ? '#3730a3' : '#333'
+          }}>
+            {latestStatus}
+          </span>
         </div>
         <div className="detail-row">
           <strong>Deployments:</strong> 
