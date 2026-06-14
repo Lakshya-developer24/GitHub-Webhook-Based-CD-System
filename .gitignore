@@ -1,2 +1,3 @@
 .DS_Store
 .env
+nginx/conf.d/*.conf

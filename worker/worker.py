@@ -183,10 +183,19 @@ async def main():
             port = 5000 + deployment_id
             container_name = f"platform-app-{deployment_id}"
             
-            await append_deployment_log(deployment_id, f"Running container {container_name} on port {port}...\n")
+            # Find the network name dynamically
+            stdout_net, _, _ = run_cmd(["docker", "inspect", "platform-worker", "--format", "{{json .NetworkSettings.Networks}}"])
+            try:
+                networks = json.loads(stdout_net.strip())
+                network_name = list(networks.keys())[0]
+            except Exception:
+                network_name = "bridge"
+            
+            await append_deployment_log(deployment_id, f"Running container {container_name} on port {port} attached to network {network_name}...\n")
             stdout, stderr, code = run_cmd([
                 "docker", "run", "-d",
                 "--name", container_name,
+                "--network", network_name,
                 "-p", f"{port}:80",
                 image_name
             ])
@@ -212,6 +221,51 @@ async def main():
                 completed_at=datetime.utcnow()
             )
             await append_deployment_log(deployment_id, "Status updated to RUNNING.\n")
+            
+            # --- STAGE 8 EXTENSION ---
+            nginx_conf_dir = "/app/nginx/conf.d"
+            os.makedirs(nginx_conf_dir, exist_ok=True)
+            conf_path = os.path.join(nginx_conf_dir, f"deployment-{deployment_id}.conf")
+            
+            nginx_config_content = f"""location /deployments/{deployment_id}/ {{
+    proxy_pass http://{container_name}:80/;
+}}
+"""
+            await append_deployment_log(deployment_id, f"Generating NGINX configuration at {conf_path}...\n")
+            
+            try:
+                with open(conf_path, "w") as f:
+                    f.write(nginx_config_content)
+                await append_deployment_log(deployment_id, "NGINX configuration generated.\n")
+                
+                await append_deployment_log(deployment_id, "Reloading NGINX...\n")
+                stdout, stderr, code = run_cmd(["docker", "exec", "platform-nginx", "nginx", "-s", "reload"])
+                
+                if stdout:
+                    await append_deployment_log(deployment_id, stdout + "\n")
+                if stderr:
+                    await append_deployment_log(deployment_id, stderr + "\n")
+                    
+                if code != 0:
+                    raise Exception(f"NGINX reload failed with exit code {code}")
+                    
+                await append_deployment_log(deployment_id, "NGINX reloaded successfully.\n")
+                
+                final_url = f"http://localhost/deployments/{deployment_id}"
+                await update_deployment_status(
+                    deployment_id, 
+                    "RUNNING", 
+                    deployment_url=final_url
+                )
+                await append_deployment_log(deployment_id, f"Deployment available at {final_url}\n")
+                
+            except Exception as e:
+                error_msg = str(e)
+                await update_deployment_status(deployment_id, "FAILED", error="NGINX config failed")
+                await append_deployment_log(deployment_id, f"NGINX configuration or reload failed: {error_msg}\n")
+                if os.path.exists(conf_path):
+                    os.remove(conf_path)
+                continue
             
         except Exception as e:
             print(f"Error processing job: {e}")
