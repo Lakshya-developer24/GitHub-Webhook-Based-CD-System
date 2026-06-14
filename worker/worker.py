@@ -35,7 +35,7 @@ async def append_deployment_log(deployment_id: int, log_entry: str):
             """)
             await session.execute(query, {"new_log": log_entry, "id": deployment_id})
 
-async def update_deployment_status(deployment_id: int, status: str, error: str = None):
+async def update_deployment_status(deployment_id: int, status: str, error: str = None, image_name: str = None):
     async with AsyncSessionLocal() as session:
         async with session.begin():
             if error is not None:
@@ -45,6 +45,13 @@ async def update_deployment_status(deployment_id: int, status: str, error: str =
                     WHERE id = :id
                 """)
                 await session.execute(query, {"status": status, "error": error, "id": deployment_id})
+            elif image_name is not None:
+                query = text("""
+                    UPDATE deployments 
+                    SET status = :status, image_name = :image_name 
+                    WHERE id = :id
+                """)
+                await session.execute(query, {"status": status, "image_name": image_name, "id": deployment_id})
             else:
                 query = text("""
                     UPDATE deployments 
@@ -136,6 +143,41 @@ async def main():
             # 7. Both operations succeed: status = BUILDING
             await update_deployment_status(deployment_id, "BUILDING")
             await append_deployment_log(deployment_id, "Status updated to BUILDING.\n")
+            
+            # --- STAGE 6 EXTENSION ---
+            # 1. Verify Dockerfile exists
+            dockerfile_path = os.path.join(clone_dir, "Dockerfile")
+            if not os.path.exists(dockerfile_path):
+                await update_deployment_status(deployment_id, "FAILED", error="Dockerfile not found")
+                await append_deployment_log(deployment_id, "Dockerfile not found in the repository root.\n")
+                shutil.rmtree(clone_dir, ignore_errors=True)
+                continue
+                
+            # 2. Build image
+            sha_short = commit_sha[:7]
+            image_name = f"platform-image-{repo_id}-{sha_short}"
+            await append_deployment_log(deployment_id, f"Building Docker image {image_name}...\n")
+            
+            stdout, stderr, code = run_cmd(["docker", "build", "-t", image_name, clone_dir])
+            
+            if stdout:
+                await append_deployment_log(deployment_id, stdout + "\n")
+            if stderr:
+                await append_deployment_log(deployment_id, stderr + "\n")
+                
+            if code != 0:
+                await update_deployment_status(deployment_id, "FAILED", error="Docker build failed")
+                await append_deployment_log(deployment_id, f"Docker build failed with exit code {code}.\n")
+                # Remove partially built image if it exists
+                run_cmd(["docker", "rmi", "-f", image_name])
+                shutil.rmtree(clone_dir, ignore_errors=True)
+                continue
+                
+            await append_deployment_log(deployment_id, "Docker build completed successfully.\n")
+            
+            # 3. Build succeeds: status = DEPLOYING
+            await update_deployment_status(deployment_id, "DEPLOYING", image_name=image_name)
+            await append_deployment_log(deployment_id, "Status updated to DEPLOYING.\n")
             
         except Exception as e:
             print(f"Error processing job: {e}")
