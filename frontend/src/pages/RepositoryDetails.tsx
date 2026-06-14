@@ -14,12 +14,17 @@ interface Repository {
 export default function RepositoryDetails() {
   const { id } = useParams<{ id: string }>();
   const [repo, setRepo] = useState<Repository | null>(null);
+  const [deploymentCount, setDeploymentCount] = useState(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
     api.get<Repository>(`/repositories/${id}`)
       .then(res => setRepo(res.data))
       .catch(() => setError('Repository not found.'));
+      
+    api.get<any[]>(`/repositories/${id}/deployments`)
+      .then(res => setDeploymentCount(res.data.length))
+      .catch(() => {});
   }, [id]);
 
   if (error) return <div className="container"><div className="alert alert-error">{error}</div><Link to="/">Back</Link></div>;
@@ -49,6 +54,11 @@ export default function RepositoryDetails() {
         </div>
         <div className="detail-row">
           <strong>Registered At:</strong> <span>{new Date(repo.registered_at).toLocaleString()}</span>
+        </div>
+        <div className="detail-row">
+          <strong>Deployments:</strong> 
+          <span style={{marginRight: '1rem'}}>{deploymentCount} total</span>
+          <Link to={`/repositories/${repo.id}/deployments`} className="btn btn-primary" style={{padding: '0.25rem 0.5rem', fontSize: '0.875rem'}}>View History</Link>
         </div>
       </div>
     </div>

@@ -23,3 +23,20 @@ class RepositoryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class DeploymentResponse(BaseModel):
+    id: int
+    repo_id: int
+    commit_sha: str
+    triggered_by: str
+    status: str
+    image_name: Optional[str] = None
+    container_name: Optional[str] = None
+    deployment_url: Optional[str] = None
+    logs: Optional[str] = None
+    error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

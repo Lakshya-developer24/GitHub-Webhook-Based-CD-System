@@ -11,6 +11,8 @@ load_dotenv()
 app = FastAPI(title="GitOps CD Platform")
 
 app.include_router(repositories.router, prefix="/repositories", tags=["Repositories"])
+from routes import webhooks
+app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 
 @app.get("/health")
 async def health_check():

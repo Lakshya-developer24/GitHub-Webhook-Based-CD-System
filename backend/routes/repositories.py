@@ -47,3 +47,11 @@ async def get_repository(repo_id: int, db: AsyncSession = Depends(get_db)):
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found.")
     return repo
+
+@router.get("/{repo_id}/deployments")
+async def get_repository_deployments(repo_id: int, db: AsyncSession = Depends(get_db)):
+    from schemas import DeploymentResponse
+    from models import Deployment
+    result = await db.execute(select(Deployment).filter(Deployment.repo_id == repo_id).order_by(Deployment.id.desc()))
+    deployments = result.scalars().all()
+    return deployments

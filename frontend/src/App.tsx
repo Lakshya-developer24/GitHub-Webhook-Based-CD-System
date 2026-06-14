@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import RepositoryRegistration from './pages/RepositoryRegistration';
 import RepositoryDetails from './pages/RepositoryDetails';
+import DeploymentHistory from './pages/DeploymentHistory';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/register" element={<RepositoryRegistration />} />
           <Route path="/repositories/:id" element={<RepositoryDetails />} />
+          <Route path="/repositories/:id/deployments" element={<DeploymentHistory />} />
         </Routes>
       </main>
     </BrowserRouter>
